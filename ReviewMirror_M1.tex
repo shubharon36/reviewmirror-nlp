@@ -1,0 +1,148 @@
+
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{amsmath, amssymb}
+\usepackage{url}
+\usepackage{xcolor}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black}
+
+\title{\textbf{ReviewMirror} -- Tracking Opinion Drift in E-Commerce Reviews \\
+\large Milestone~1: Data Backbone \& Literature Plan}
+\author{Team Name Here}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Users' opinions in product reviews can evolve over time due to preference shifts, product lifecycle effects, or strategic behavior. This milestone identifies suitable datasets, defines the core data model and preprocessing plan, and summarizes relevant literature that informs our representation and evaluation of user-level \emph{opinion drift}.
+\end{abstract}
+
+\section{Problem Statement \& Objectives}
+We study how an individual user's sentiment and writing tone change across their review history. Our objectives are: (1) analyze temporal patterns of opinions in longitudinal review data; (2) define a representation to compare a user's sentiment/style over time; (3) quantify and visualize drift with interpretable linguistic or behavioral signals; (4) justify modeling and evaluation choices grounded in prior work.
+
+\section{Datasets (Primary, Backup, Optional)}
+\paragraph{Primary: Amazon Review Data (2018, UCSD).} The 2018 release contains $\sim$233.1M reviews spanning May~1996--Oct~2018 with fields such as \texttt{reviewerID}, \texttt{asin}, \texttt{reviewText}, \texttt{overall} (stars), and \texttt{unixReviewTime}. It also provides a \emph{5-core} subset (users/items with $\ge\!5$ reviews) and per-category splits---we will use the \textbf{Electronics 5-core} subset for computational tractability and longitudinal coverage.\footnote{Official page: \url{https://cseweb.ucsd.edu/~jmcauley/datasets/amazon_v2/}.}
+\vspace{4pt}
+
+\noindent\textit{Forward-compatibility.} McAuley Lab released a 2023 expansion (571.5M reviews to Sep~2023) with richer metadata and maintained category mappings. We keep this as an upgrade path if broader coverage is needed.\footnote{Amazon Reviews 2023: \url{https://amazon-reviews-2023.github.io/} (see also the HuggingFace dataset card).}
+
+\paragraph{Backup: Yelp Open Dataset.} JSON files for reviews (\texttt{review\_id}, \texttt{user\_id}, \texttt{business\_id}, \texttt{stars}, \texttt{date}, \texttt{text}), businesses, and users. Suitable for cross-domain validation in services settings.\footnote{Yelp Open Dataset: \url{https://business.yelp.com/data/resources/open-dataset/}.}
+
+\paragraph{Optional cross-domain (aspect-rich): BeerAdvocate.} Long-horizon beer reviews with per-aspect ratings (appearance, aroma, palate, taste, overall), enabling aspect-specific drift analyses.\footnote{See, e.g., corpus stats reported in prior work using BeerAdvocate.}
+
+\section{Data Model \& Schema}
+We will curate one tidy row per review:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Field & Description\\
+\midrule
+\texttt{user\_id} & Reviewer identifier (\texttt{reviewerID} / \texttt{user\_id})\\
+\texttt{item\_id} & Product/business identifier (\texttt{asin} / \texttt{business\_id})\\
+\texttt{ts} & Timestamp (from \texttt{unixReviewTime} or \texttt{date})\\
+\texttt{text} & Raw review text\\
+\texttt{stars} & Star rating (1--5)\\
+\texttt{category} & (Optional) high-level category for stratification\\
+\texttt{helpful\_votes} & (Optional) helpfulness/engagement signal\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Derived features for trajectories: (i) \emph{text sentiment} (lexicon baseline, e.g., VADER; then transformer-based polarity), (ii) \emph{style/tone} proxies (exclamation density, first-person ratio, subjectivity/readability), (iii) time indices (calendar month, time-since-first-review).
+
+\section{Preprocessing Pipeline}
+\begin{enumerate}[leftmargin=*, itemsep=2pt]
+\item \textbf{Ingest} per-category JSON (gzipped) $\rightarrow$ dataframe with fields above.
+\item \textbf{Filter} language to English; drop empty/near-duplicate texts (optional MinHash).
+\item \textbf{User coverage} keep users with $\ge k$ reviews (default $k{=}5$) to enable trajectories.
+\item \textbf{Normalize time} convert to UTC timestamps; derive month bins; sort per user.
+\item \textbf{Light labeling} compute baseline polarity (e.g., VADER compound $\in[-1,1]$) and standardize to $z$-scores within-user for comparability.
+\item \textbf{Export} two artifacts: \texttt{reviews.parquet} (row-level) and \texttt{user\_trajectories.parquet} (per-user sequences with features per time bin).
+\end{enumerate}
+
+\section{Representation of Opinion Trajectories}
+For user $u$, define a sequence $\{(t_i, s_i, r_i, \mathbf{f}_i)\}_{i=1}^{n_u}$ where $s_i$ is text polarity, $r_i$ is (normalized) stars, and $\mathbf{f}_i$ are style features.
+\begin{itemize}[leftmargin=*, itemsep=2pt]
+\item \textbf{Hybrid sentiment:} $h_i = \alpha s_i + (1-\alpha)\,\tilde r_i$, $\alpha\in[0,1]$, $\tilde r_i\in[-1,1]$ from stars.
+\item \textbf{Smoothed path:} $\bar h_{t} = \mathrm{EWMA}_\lambda(h_i)$ within sliding windows.
+\item \textbf{Drift magnitude:} $\mathrm{DriftIdx}(u)= \bar h_{T}-\bar h_{0}$ and robust \emph{slope} of $h$ on time.
+\item \textbf{Change points:} ADWIN/Page--Hinkley on $h_i$; optional topic/style evolution for interpretation.
+\end{itemize}
+
+\section{Quantifying \& Visualizing Drift}
+\textbf{Quantification:} (a) signed slope; (b) total variation $\sum_i |h_{i}-h_{i-1}|$; (c) fraction of sign flips; (d) divergence between early vs.\ late windows, e.g., $\mathrm{KL}(P_{\text{early}}(s)\,\|\,P_{\text{late}}(s))$; (e) ADWIN change-point count / time-to-change.\\
+\textbf{Visualization:} (i) per-user sparklines with detected change points; (ii) cohort heatmaps by first-review year; (iii) Sankey of rating transitions; (iv) wordshift-style plots showing terms driving early$\to$late polarity changes.
+
+\section{Modeling \& Evaluation Rationale}
+\textbf{Nonstationarity.} Concept-drift literature motivates adaptive windows and change detection for evolving streams. We will compare \emph{static} baselines to \emph{adaptive} detectors (ADWIN/Page--Hinkley). For interpretability we align change-points with shifts in lexicon (n-grams) and style; for temporal structure we may explore time-aware sequence models or dynamic topic models (DTM) to summarize evolving aspects.\\
+\textbf{Evaluation.} (1) Internal validity: alignment of detected changes with star-rating trajectories (proxy ground truth); (2) Robustness: sensitivity to $\alpha$, bin width, smoothing; (3) External validity: replicate on Yelp. Report user-level AUC for change vs.\ no-change classification under time-based splits, and cohort statistics.
+
+\section{Data Provenance, Ethics \& Practicalities}
+The Amazon and Yelp datasets are widely used academic corpora with stable schemas and licensing for research use. We avoid deanonymization, report aggregates only, and note confounders such as product mix and platform effects. We will document class imbalance (positive-skewed ratings) and conduct sensitivity checks.
+
+\section*{Deliverables for Milestone 1}
+\begin{itemize}[leftmargin=*, itemsep=2pt]
+\item Chosen dataset: Amazon Reviews 2018 (\emph{Electronics 5-core}); Backup: Yelp Open Dataset.
+\item Data schema, preprocessing plan, and drift metrics (this document).
+\item Starter scripts to ingest, filter, and build per-user trajectories.
+\end{itemize}
+
+\section*{Appendix: Repro Steps (Draft)}
+\begin{verbatim}
+# 1) Download Electronics reviews (5-core) from the official page.
+# 2) Run prep_amazon_opinion_drift.py to create:
+#    - reviews.parquet (row-level)
+#    - user_trajectories.parquet (per-user sequences with sentiments)
+# 3) Use notebooks to preview drift visualizations.
+\end{verbatim}
+
+\begin{thebibliography}{9}
+
+\bibitem{ni2018}
+J.~Ni, J.~Li, J.~McAuley.
+\newblock Amazon Review Data (2018).
+\newblock \url{https://cseweb.ucsd.edu/~jmcauley/datasets/amazon_v2/}.
+
+\bibitem{amazon2023}
+McAuley Lab.
+\newblock Amazon Reviews 2023 (571.5M reviews; May~1996--Sep~2023).
+\newblock \url{https://amazon-reviews-2023.github.io/}.
+
+\bibitem{yelp}
+Yelp Open Dataset.
+\newblock Reviews/business/users JSON schema and downloads.
+\newblock \url{https://business.yelp.com/data/resources/open-dataset/}.
+
+\bibitem{beer}
+BeerAdvocate (research usage).
+\newblock Aspect-rated beer reviews (appearance, aroma, palate, taste, overall).
+\newblock e.g., corpus statistics reported across multiple studies.
+
+\bibitem{gama2014}
+J.~Gama, I.~\v{Z}liobaite, A.~Bifet, M.~Pechenizkiy, A.~Bouchachia.
+\newblock A Survey on Concept Drift Adaptation.
+\newblock \emph{ACM Computing Surveys}, 2014.
+
+\bibitem{adwin2007}
+A.~Bifet, R.~Gavalda.
+\newblock Learning from Time-Changing Data with Adaptive Windowing (ADWIN).
+\newblock \emph{SIAM International Conference on Data Mining}, 2007.
+
+\bibitem{koren2010}
+Y.~Koren.
+\newblock Collaborative Filtering with Temporal Dynamics.
+\newblock \emph{Communications of the ACM}, 2010.
+
+\bibitem{dtm2006}
+D.~Blei, J.~Lafferty.
+\newblock Dynamic Topic Models.
+\newblock \emph{ICML}, 2006.
+\end{thebibliography}
+
+\end{document}

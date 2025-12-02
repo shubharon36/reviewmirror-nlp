@@ -1,0 +1,11 @@
+# Large data files / folders – do NOT upload to GitHub
+Electronics_5.json*
+data/
+runs/
+
+# Other typical large/generated stuff
+*.npz
+*.gz
+*.zip
+*.pt
+*.pkl

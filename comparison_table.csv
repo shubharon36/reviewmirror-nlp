@@ -1,0 +1,6 @@
+Metric,Baseline,Enhanced,Better
+Test Set Size,400,400,→
+MAE (Slope),0.0472,0.0472,✓ Baseline
+High-Drift Users (%),37.5%,37.5%,→
+Users with Change-Points,N/A (not detected),0 (0.0%),✓ NEW
+User Clusters Identified,N/A (no clustering),4 distinct groups,✓ NEW
