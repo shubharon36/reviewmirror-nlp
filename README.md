@@ -112,8 +112,8 @@ CONFIG["input_path"] = r"C:\your\path\to\Electronics_5.json"
 ### Individual Journeys
 <table>
   <tr>
-    <td><img src="user_traj_1.png" width="400"/></td>
-    <td><img src="user_traj_3.png" width="400"/></td>
+    <td><img src="figs/user_traj_1.png" width="400"/></td>
+    <td><img src="figs/user_traj_3.png" width="400"/></td>
   </tr>
   <tr>
     <td align="center"><em>Volatile user: sentiment all over the place</em></td>
