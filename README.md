@@ -105,7 +105,7 @@ CONFIG["input_path"] = r"C:\your\path\to\Electronics_5.json"
 ## 🖼️ Cool Visualizations We Made
 
 ### User Types (Box Plot)
-![Types](runs/enhanced_v1_20251119_001142/figs/cluster_boxplots.png)
+![Types](cluster_boxplots.png)
 
 *See how different each group is!*
 
@@ -122,7 +122,7 @@ CONFIG["input_path"] = r"C:\your\path\to\Electronics_5.json"
 </table>
 
 ### K-means vs GNN
-![Comparison](runs/enhanced_v1_20251119_001142/figs/cluster_comparison_distribution.png)
+![Comparison](cluster_comparison_distribution.png)
 
 *Both find different patterns—both useful!*
 
